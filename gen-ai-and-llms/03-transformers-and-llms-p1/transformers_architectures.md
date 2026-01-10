@@ -1,15 +1,15 @@
 ## BERT (Bidirectional Encoder Representations from Transformers)
 
-Modelos bidirecional que usa a informação tanto à esquerda quanto à direita de uma palavra numa sequência para executar determinada tarefa.
+Bidirectional model that uses information both to the left and right of a word in a sequence to perform a specific task.
 
-Útil para problemas como classificação de sentimentos e extração de entiddades nomeadas.
+Useful for problems such as sentiment classification and named entity extraction.
 
-Explicação mais completa: https://huggingface.co/blog/bert-101
+More detailed explanation: https://huggingface.co/blog/bert-101
 
 ## GPT (Generative Pre-Trained Transformer)
 
-Focado em geração de texto o GPT usa o contexto à esquerda para prever a próxima palavra numa sequência.
+Focused on text generation, GPT uses the context to the left to predict the next word in a sequence.
 
-Útil em problemas de geração de texto. 
+Useful for text generation problems.
 
-Reporte técnico sobre o GPT-4: https://cdn.openai.com/papers/gpt-4.pdf
+Technical report on GPT-4: https://cdn.openai.com/papers/gpt-4.pdf
