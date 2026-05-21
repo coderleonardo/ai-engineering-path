@@ -266,3 +266,18 @@ where:
 - **Hardware Requirements:** Benefits most from modern GPUs with fast memory bandwidth
 
 ![LoRA and QLoRA](./images/lora-qlora.png)
+
+## Supervised Fine-Tuning (SFT)
+
+* **Definition:** The process of adapting a pretrained base LLM (originally trained via self-supervised next-token prediction) to perform specific downstream tasks by training it on a curated dataset of explicit **Prompt-Response (Instruction-Output) pairs**.
+* **Objective:** Shift the model's behavior from a generic text-completer to an aligned assistant, task-specialist, or domain-expert, minimizing cross-entropy loss specifically on the target tokens.
+
+#### The Architectural Bottleneck & PEFT Integration
+
+While SFT changes how the model operates, executing it via **Full Fine-Tuning** (modifying 100% of the weights) creates severe engineering challenges: catastrophic forgetting of base reasoning, massive VRAM requirements for optimizer states, and high storage overhead for each task-specific iteration.
+
+To make SFT viable in production, we integrate **LoRA** and **QLoRA** as the optimization layer:
+
+* **Preservation of Base Capabilities:** By freezing the base model weights, SFT via LoRA/QLoRA eliminates catastrophic forgetting. The original world knowledge remains intact while the adapters learn the new task mechanics.
+* **Decoupled Architecture:** You can train multiple independent SFT adapters (e.g., one for code generation, one for customer support) using the exact same underlying base model. At runtime, these tiny adapter weights (frequently less than 1% of the total parameters) are swapped or merged dynamically.
+* **Resource Optimization:** QLoRA drops the base model memory footprint to 4-bit (NF4), allowing the SFT backpropagation loop to compute gradients strictly for the low-rank matrices ($A$ and $B$). This cuts hardware constraints drastically, making the distillation of complex instructions viable on single-GPU setups.
