@@ -4,9 +4,7 @@ This module builds a RAG (Retrieval-Augmented Generation) assistant that answers
 PDFs. Theory lives in the source notes:
 [`prompt_engineering_basics.md`](./prompt_engineering_basics.md) (how to phrase prompts effectively) and
 [`vector_databases.md`](./vector_databases.md) (why embeddings + a vector store enable retrieval). This
-README covers how the pipeline is actually built and wired up. Two notebooks implement the same assistant
-with different stacks: one using OpenAI and the legacy LangChain chain style, and `rag_and_chats.ipynb`
-reproducing it with Gemini and a more modern LCEL chain style.
+README covers how the pipeline is actually built and wired up.
 
 ## Pipeline Overview
 
@@ -43,15 +41,15 @@ too large dilutes the prompt with irrelevant context and wastes tokens.
 
 ## 3. Augmented Generation — Two Ways to Wire It
 
-Both notebooks implement the same idea — "answer using only the retrieved context" — but with different
-LangChain APIs, reflecting how the library evolved:
+The same idea — "answer using only the retrieved context" — can be wired up with either of two LangChain
+styles, reflecting how the library evolved:
 
 ```mermaid
 flowchart LR
     subgraph Legacy["Legacy chain"]
         L1["load_qa_chain(llm, chain_type='stuff')"] --> L2["chain.run(input_documents, question)"]
     end
-    subgraph LCEL["rag_and_chats.ipynb — LCEL"]
+    subgraph LCEL["LangChain Expression Language"]
         C1["ChatPromptTemplate"] --> C2["| llm |"] --> C3["StrOutputParser()"]
     end
 ```
@@ -59,11 +57,10 @@ flowchart LR
 - The legacy approach uses `load_qa_chain(..., chain_type="stuff")` — the "stuff" strategy simply
   concatenates ("stuffs") all retrieved documents directly into the prompt template in one shot. It's the
   simplest chain type, appropriate as long as the retrieved context fits comfortably in the context window.
-- `rag_and_chats.ipynb` builds the equivalent behavior explicitly with **LCEL** (LangChain Expression
-  Language): a prompt template piped (`|`) into the chat model, piped into an output parser that extracts
-  plain text from the model's response object. This compositional style makes each stage of the chain
-  visible and swappable, which is why it has largely superseded the older `Chain` subclasses like
-  `load_qa_chain`.
+- The **LCEL** (LangChain Expression Language) approach builds the equivalent behavior explicitly: a
+  prompt template piped (`|`) into the chat model, piped into an output parser that extracts plain text
+  from the model's response object. This compositional style makes each stage of the chain visible and
+  swappable, which is why it has largely superseded the older `Chain` subclasses like `load_qa_chain`.
 
 In both cases, the retrieved context and the user's question are the only two inputs the final prompt
 template needs — everything upstream (loading, embedding, indexing, retrieving) exists purely to produce

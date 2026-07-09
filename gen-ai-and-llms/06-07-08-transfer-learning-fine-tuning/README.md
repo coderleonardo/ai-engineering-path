@@ -13,9 +13,9 @@ causal LM is used here rather than a classification head — see
 
 **Technique:** QLoRA (4-bit quantization + LoRA), trained via TRL's `SFTTrainer`. `fine_tuning.md` in this
 folder covers the theory — PEFT, LoRA's low-rank decomposition math, QLoRA's quantization, and Supervised
-Fine-Tuning — in depth, with a worked parameter-count example. This README instead walks through what the
-notebook actually does with that theory: fine-tune Llama-2-7b, then merge the adapters back into the base
-model for standalone deployment.
+Fine-Tuning — in depth, with a worked parameter-count example. This README instead walks through how that
+theory is applied in practice: fine-tune Llama-2-7b, then merge the adapters back into the base model for
+standalone deployment.
 
 ## Pipeline Overview
 
@@ -68,9 +68,8 @@ accommodate one 2000-token outlier elsewhere in the dataset:
 
 ## 3. Training Configuration — Two Configs, One Used
 
-The notebook defines a `TrainingArguments` object first, but the `SFTTrainer` is actually constructed
-with
-a separate `SFTConfig` — the values that matter are the ones on `SFTConfig`:
+A `TrainingArguments` object is defined first, but the `SFTTrainer` is actually constructed with a
+separate `SFTConfig` — the values that matter are the ones on `SFTConfig`:
 
 | Hyperparameter | Value | Why |
 |---|---|---|
@@ -107,12 +106,12 @@ After training, the adapter weights are saved on their own (small) and used dire
 inference through a `text-generation` pipeline — this is the "keep separate" inference option
 `fine_tuning.md` describes: every forward pass computes `frozen_weight(x) + adapter(x)`.
 
-The notebook then does the second option: it reloads the *base* model fresh in fp16 (not 4-bit this time,
-since there's no longer any training to save memory for), wraps it with `PeftModel.from_pretrained` using
-the saved adapter, and calls `merge_and_unload()` — literally adding the LoRA delta into the base weight
-matrices and discarding the separate adapter structure. The result is saved as an ordinary model +
-tokenizer pair with zero LoRA-related inference overhead, deployable anywhere a plain Llama-2 checkpoint
-would be, with no PEFT dependency required at serving time.
+The second option reloads the *base* model fresh in fp16 (not 4-bit this time, since there's no longer any
+training to save memory for), wraps it with `PeftModel.from_pretrained` using the saved adapter, and calls
+`merge_and_unload()` — literally adding the LoRA delta into the base weight matrices and discarding the
+separate adapter structure. The result is saved as an ordinary model + tokenizer pair with zero LoRA-
+related inference overhead, deployable anywhere a plain Llama-2 checkpoint would be, with no PEFT
+dependency required at serving time.
 
 ## 5. Inference
 
