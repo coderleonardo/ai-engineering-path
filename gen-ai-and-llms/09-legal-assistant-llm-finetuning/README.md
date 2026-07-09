@@ -11,7 +11,7 @@ and answers scraped from the Law Stack Exchange forum, loaded locally and split 
 answering.
 
 **Task framing:** given a legal question as input text, generate a legal answer as output text (sequence-
-to-sequence, not classification). The implementation lives in `dsa/project.py`.
+to-sequence, not classification).
 
 ## Pipeline Overview
 
@@ -68,63 +68,10 @@ two sequences are given asymmetric length budgets.
 
 ## 3. Evaluation Metric — ROUGE
 
-**ROUGE** (Recall-Oriented Understudy for Gisting Evaluation) measures how much overlap a generated text
-has with one or more reference texts. It was designed for summarization but is the standard metric for any
-generative task with a "ground-truth" text to compare against — including QA and legal-answer generation.
-
-Given a **candidate** (model-generated) and a **reference** (ground truth), ROUGE reports:
-
-- **Recall** = overlapping units / units in reference — "how much of the reference did we capture?"
-- **Precision** = overlapping units / units in candidate — "how much of what we generated is actually relevant?"
-- **F1** = harmonic mean of precision and recall
-
-The variants differ only in what counts as a "unit":
-
-| Variant | Unit compared | Captures |
-|---|---|---|
-| **ROUGE-N** | n-grams (N=1 unigrams, N=2 bigrams, ...) | word/phrase overlap |
-| **ROUGE-L** | Longest Common Subsequence (LCS) | in-order overlap, tolerant to gaps/insertions |
-| **ROUGE-W** | weighted LCS | like ROUGE-L, but rewards *consecutive* matches over scattered ones |
-| **ROUGE-S** | skip-bigrams (any ordered pair, gaps allowed) | looser word-order sensitivity than ROUGE-N |
-
-In practice, HuggingFace's `evaluate` library reports **ROUGE-1, ROUGE-2, ROUGE-L (and ROUGE-Lsum)** by
-default; ROUGE-W and ROUGE-S are rarely used outside the original ROUGE paper/toolkit.
-
-### Worked example
-
-```
-reference: "the cat sat on the mat"
-candidate: "the cat was sat on the mat"
-```
-
-**ROUGE-1** (unigram overlap): reference has 6 tokens, candidate has 7. Matched tokens: `the`(×2), `cat`, `sat`, `on`, `mat` → 6 overlapping unigrams.
-
-```
-recall    = 6 / 6 = 1.000
-precision = 6 / 7 = 0.857
-F1        = 2 * (0.857 * 1.000) / (0.857 + 1.000) = 0.923
-```
-
-**ROUGE-2** (bigram overlap): reference bigrams = `{the-cat, cat-sat, sat-on, on-the, the-mat}` (5); candidate bigrams = `{the-cat, cat-was, was-sat, sat-on, on-the, the-mat}` (6). Matched: `the-cat, sat-on, on-the, the-mat` → 4.
-
-```
-recall    = 4 / 5 = 0.800
-precision = 4 / 6 = 0.667
-F1        = 2 * (0.667 * 0.800) / (0.667 + 0.800) = 0.727
-```
-
-**ROUGE-L** (LCS): the longest common subsequence between the two sentences is `the cat sat on the mat` (length 6) — the extra word `was` in the candidate simply doesn't participate.
-
-```
-recall    = 6 / 6 = 1.000
-precision = 6 / 7 = 0.857
-F1        = 0.923   (same as ROUGE-1 in this example)
-```
-
-**Interpretation:** ROUGE-1 shows almost all reference content was reproduced; ROUGE-2 drops because
-inserting "was" breaks two bigrams; ROUGE-L confirms the sentence still preserves the reference's word
-order despite the insertion. Comparing several variants side-by-side is how you distinguish "captured the
-right words" (ROUGE-1) from "captured the right phrasing/order" (ROUGE-L).
+This project uses **ROUGE** to score generated answers against reference answers. What ROUGE measures, its
+variants (ROUGE-N/L/W/S), and a worked numeric example live in
+[`metrics_to_evaluate_llms.md`](../03-transformers-and-llms-p1/metrics_to_evaluate_llms.md#rouge-recall-oriented-understudy-for-gisting-evaluation)
+— this section covers only how the metric is actually computed inside the training loop.
 
 ### Computing the metric during training
 

@@ -13,9 +13,9 @@ causal LM is used here rather than a classification head — see
 
 **Technique:** QLoRA (4-bit quantization + LoRA), trained via TRL's `SFTTrainer`. `fine_tuning.md` in this
 folder covers the theory — PEFT, LoRA's low-rank decomposition math, QLoRA's quantization, and Supervised
-Fine-Tuning — in depth, with a worked parameter-count example. This README instead walks through what
-`dsa/project.py` actually does with that theory: fine-tune Llama-2-7b, then merge the adapters back into
-the base model for standalone deployment.
+Fine-Tuning — in depth, with a worked parameter-count example. This README instead walks through what the
+notebook actually does with that theory: fine-tune Llama-2-7b, then merge the adapters back into the base
+model for standalone deployment.
 
 ## Pipeline Overview
 
@@ -68,7 +68,8 @@ accommodate one 2000-token outlier elsewhere in the dataset:
 
 ## 3. Training Configuration — Two Configs, One Used
 
-The notebook defines a `TrainingArguments` object first, but the `SFTTrainer` is actually constructed with
+The notebook defines a `TrainingArguments` object first, but the `SFTTrainer` is actually constructed
+with
 a separate `SFTConfig` — the values that matter are the ones on `SFTConfig`:
 
 | Hyperparameter | Value | Why |

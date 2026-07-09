@@ -4,9 +4,7 @@
 [module 03](../03-transformers-and-llms-p1/README.md) for why decoder-only architectures suit generation).
 
 This module is the first hands-on look at autoregressive text generation, with no fine-tuning involved —
-just loading a pretrained GPT-2 and driving its `.generate()` API. Two notebooks cover the same exercise:
-`dsa_EstudoCaso.ipynb` (course-provided) and `text_generation.ipynb` (the same flow, reproduced
-independently). Both boil down to the same pipeline.
+just loading a pretrained GPT-2 and driving its `.generate()` API.
 
 ## Pipeline Overview
 

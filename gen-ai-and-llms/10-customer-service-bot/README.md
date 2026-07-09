@@ -14,7 +14,7 @@ the results.
 loaded quantized to 4-bit precision and kept fully frozen; only small
 [LoRA](https://huggingface.co/docs/peft) adapter matrices are trained on top. This is what makes fine-
 tuning a 7B model tractable on a single consumer/prosumer GPU, at the cost of some extra setup compared to
-plain full fine-tuning. Implementation lives in `dsa/project.py`.
+plain full fine-tuning.
 
 ## Pipeline Overview
 
@@ -130,17 +130,10 @@ gradient checkpointing, since checkpointing assumes activations get recomputed r
 
 ## 6. Evaluation — BLEU
 
-**BLEU** (Bilingual Evaluation Understudy) compares generated text against a reference by measuring
-n-gram precision — for each n-gram size (1 through 4), what fraction of the generated text's n-grams also
-appear in the reference — then combines those precisions with a geometric mean. A **brevity penalty**
-counteracts the fact that shorter outputs can trivially inflate precision by only emitting "safe," highly
-overlapping n-grams; the penalty pulls the score down when the generated text is noticeably shorter than
-the reference.
-
-BLEU is more common for tasks with a strong emphasis on precise, close-to-reference phrasing (its origin
-is machine translation); ROUGE — used in the legal-assistant module — leans more toward recall
-(did we capture the reference's content), which suits open-ended answer generation. Neither is a full
-substitute for qualitative review.
+This project uses **BLEU** to score generated answers against reference answers. What BLEU measures
+(n-gram precision, geometric mean, brevity penalty) and how it compares to ROUGE lives in
+[`metrics_to_evaluate_llms.md`](../03-transformers-and-llms-p1/metrics_to_evaluate_llms.md#bleu-bilingual-evaluation-understudy)
+— this section covers only the actual results from this run.
 
 In this run, unigram precision (~0.375) was noticeably higher than 4-gram precision (~0.133), while the
 brevity penalty stayed close to 1 (generated and reference lengths were similar). That pattern — decent

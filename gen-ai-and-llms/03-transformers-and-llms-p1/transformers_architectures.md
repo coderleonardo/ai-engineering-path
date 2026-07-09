@@ -1,4 +1,7 @@
-## BERT (Bidirectional Encoder Representations from Transformers)
+Transformers split into three architecture families, distinguished by which direction of context each one
+attends to and what that makes them good at.
+
+## BERT (Bidirectional Encoder Representations from Transformers) — Encoder-only
 
 Bidirectional model that uses information both to the left and right of a word in a sequence to perform a specific task.
 
@@ -6,10 +9,20 @@ Useful for problems such as sentiment classification and named entity extraction
 
 More detailed explanation: https://huggingface.co/blog/bert-101
 
-## GPT (Generative Pre-Trained Transformer)
+## GPT (Generative Pre-Trained Transformer) — Decoder-only
 
 Focused on text generation, GPT uses the context to the left to predict the next word in a sequence.
 
 Useful for text generation problems.
 
 Technical report on GPT-4: https://cdn.openai.com/papers/gpt-4.pdf
+
+## T5 (Text-To-Text Transfer Transformer) — Encoder-Decoder
+
+Combines both halves: an encoder builds a bidirectional representation of the full input, and a decoder
+generates output tokens conditioned on that representation plus whatever it has generated so far.
+
+Useful for text-to-text tasks where the output is a transformation of the input rather than a pure
+continuation — translation, summarization, question answering.
+
+Reference: https://blog.research.google/2020/02/exploring-transfer-learning-with-t5.html
