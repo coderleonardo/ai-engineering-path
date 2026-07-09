@@ -1,19 +1,27 @@
 # Legal Assistant — Fine-Tuning FLAN-T5 for Legal Q&A
 
-**Dataset:** [ymoslem/Law-StackExchange](https://huggingface.co/datasets/ymoslem/Law-StackExchange) — legal questions and answers scraped from the Law Stack Exchange forum.
+**Reference:** [Exploring Transfer Learning with T5: the Text To Text Transfer Transformer](https://blog.research.google/2020/02/exploring-transfer-learning-with-t5.html)
 
-**Base model:** [google/flan-t5-base](https://huggingface.co/google/flan-t5-base) — an encoder-decoder (seq2seq) model, instruction-tuned on top of T5, well suited for text-to-text tasks like question answering.
+**Dataset:** `dataset.csv` (~3,868 `question`/`answer` pairs derived from
+[ymoslem/Law-StackExchange](https://huggingface.co/datasets/ymoslem/Law-StackExchange)) — legal questions
+and answers scraped from the Law Stack Exchange forum, loaded locally and split 80/20 into train/test.
 
-**Task framing:** given a legal question as input text, generate a legal answer as output text (sequence-to-sequence, not classification).
+**Base model:** [google/flan-t5-base](https://huggingface.co/google/flan-t5-base) — an encoder-decoder
+(seq2seq) model, instruction-tuned on top of T5, well suited for text-to-text tasks like question
+answering.
+
+**Task framing:** given a legal question as input text, generate a legal answer as output text (sequence-
+to-sequence, not classification). The implementation lives in `dsa/project.py`.
 
 ## Pipeline Overview
 
-Fine-tuning a seq2seq model follows a fixed order — each step depends on artifacts produced by the previous one:
+Fine-tuning a seq2seq model follows a fixed order — each step depends on artifacts produced by the
+previous one:
 
 ```mermaid
 flowchart TD
-    A["1. Load base model + tokenizer"] --> B["2. Load & inspect dataset"]
-    B --> C["3. Preprocess data<br/>tokenize inputs and labels"]
+    A["1. Load base model + tokenizer<br/>T5 checkpoint"] --> B["2. Load dataset<br/>80/20 train/test split"]
+    B --> C["3. Preprocess data<br/>prefix + tokenize inputs/labels"]
     C --> D["4. Define evaluation metric<br/>ROUGE"]
     D --> E["5. Define hyperparameters"]
     E --> F["6. Train + evaluate<br/>fine-tuning loop"]
@@ -25,51 +33,44 @@ flowchart TD
 
 ## 1. Model and Tokenizer
 
-The tokenizer is not interchangeable with any other — it encodes the exact vocabulary and rules (special tokens, subword splitting) the base model was pretrained with. Loading a mismatched tokenizer silently corrupts the inputs, so it must always come from the **same checkpoint** as the model.
+The tokenizer is not interchangeable with any other — it encodes the exact vocabulary and rules (special
+tokens, subword splitting) the base model was pretrained with. Loading a mismatched tokenizer silently
+corrupts the inputs, so it must always come from the **same checkpoint** as the model
+(`google/flan-t5-base` for both). The tokenizer is loaded with `legacy=False`, opting into the newer,
+non-legacy SentencePiece conversion behavior recommended for T5-family models.
 
-```
-model_name = "google/flan-t5-base"
-
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model     = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-```
+A `DataCollatorForSeq2Seq`, built from that tokenizer and model, sits between the tokenized dataset and
+the trainer: at batch-build time it dynamically pads each batch to its longest sequence (rather than a
+fixed global length) and automatically replaces the padding token ids inside the **labels** with `-100`,
+the value PyTorch's cross-entropy loss is configured to ignore. This is what keeps padding from being
+treated as a real token the model must learn to predict — it happens per-batch in the collator, not as a
+manual step during preprocessing.
 
 ## 2. Preprocessing
 
-The raw dataset (question/answer text pairs) must be converted into token ids the model can consume. The flow is:
+The raw dataset (question/answer text pairs) must be converted into token ids the model can consume:
 
 ```mermaid
 flowchart LR
-    A["Raw text<br/>question, answer"] --> B["Prompt formatting<br/>inputs, targets"]
+    A["Raw text<br/>question, answer"] --> B["Prompt formatting<br/>prefix + question"]
     B --> C["Tokenizer"]
     C --> D["Encoder inputs<br/>input_ids, attention_mask"]
-    C --> E["Decoder labels<br/>input_ids, padding masked as -100"]
+    C --> E["Decoder labels<br/>input_ids"]
     D --> F["Model inputs"]
     E --> F
 ```
 
-Pseudocode:
-
-```
-function preprocess(batch):
-    inputs  = ["answer the legal question: " + q for q in batch.question]
-    targets = batch.answer
-
-    model_inputs = tokenizer(inputs, max_length=MAX_INPUT_LEN, truncation=True)
-    labels       = tokenizer(targets, max_length=MAX_TARGET_LEN, truncation=True)
-
-    # padding token ids in labels must be masked so the loss ignores them
-    labels.input_ids = replace(labels.input_ids, pad_token_id, -100)
-
-    model_inputs.labels = labels.input_ids
-    return model_inputs
-
-tokenized_dataset = dataset.map(preprocess, batched=True)
-```
+Every question is prefixed with `"answer the question: "` before tokenization — a T5/FLAN-T5 convention
+where the prefix frames the task in natural language, since these models were pretrained to condition
+their output on such instruction-like prefixes. Inputs (questions) are truncated at 128 tokens and targets
+(answers) at 512 tokens: legal answers tend to be much longer than the questions that prompt them, so the
+two sequences are given asymmetric length budgets.
 
 ## 3. Evaluation Metric — ROUGE
 
-**ROUGE** (Recall-Oriented Understudy for Gisting Evaluation) measures how much overlap a generated text has with one or more reference texts. It was designed for summarization but is the standard metric for any generative task with a "ground-truth" text to compare against — including QA and legal-answer generation.
+**ROUGE** (Recall-Oriented Understudy for Gisting Evaluation) measures how much overlap a generated text
+has with one or more reference texts. It was designed for summarization but is the standard metric for any
+generative task with a "ground-truth" text to compare against — including QA and legal-answer generation.
 
 Given a **candidate** (model-generated) and a **reference** (ground truth), ROUGE reports:
 
@@ -86,7 +87,8 @@ The variants differ only in what counts as a "unit":
 | **ROUGE-W** | weighted LCS | like ROUGE-L, but rewards *consecutive* matches over scattered ones |
 | **ROUGE-S** | skip-bigrams (any ordered pair, gaps allowed) | looser word-order sensitivity than ROUGE-N |
 
-In practice, HuggingFace's `evaluate` library reports **ROUGE-1, ROUGE-2, ROUGE-L (and ROUGE-Lsum)** by default; ROUGE-W and ROUGE-S are rarely used outside the original ROUGE paper/toolkit.
+In practice, HuggingFace's `evaluate` library reports **ROUGE-1, ROUGE-2, ROUGE-L (and ROUGE-Lsum)** by
+default; ROUGE-W and ROUGE-S are rarely used outside the original ROUGE paper/toolkit.
 
 ### Worked example
 
@@ -119,42 +121,45 @@ precision = 6 / 7 = 0.857
 F1        = 0.923   (same as ROUGE-1 in this example)
 ```
 
-**Interpretation:** ROUGE-1 shows almost all reference content was reproduced; ROUGE-2 drops because inserting "was" breaks two bigrams; ROUGE-L confirms the sentence still preserves the reference's word order despite the insertion. Comparing several variants side-by-side is how you distinguish "captured the right words" (ROUGE-1) from "captured the right phrasing/order" (ROUGE-L).
+**Interpretation:** ROUGE-1 shows almost all reference content was reproduced; ROUGE-2 drops because
+inserting "was" breaks two bigrams; ROUGE-L confirms the sentence still preserves the reference's word
+order despite the insertion. Comparing several variants side-by-side is how you distinguish "captured the
+right words" (ROUGE-1) from "captured the right phrasing/order" (ROUGE-L).
 
-### `compute_metrics` used by the Trainer
+### Computing the metric during training
 
 ```mermaid
 flowchart LR
     A["predictions, labels<br/>token ids"] --> B["batch_decode predictions"]
     A --> C["replace -100 with pad_token_id"]
     C --> D["batch_decode labels"]
-    B --> E["rouge.compute"]
+    B --> E["rouge.compute<br/>use_stemmer=True"]
     D --> E
     E --> F["ROUGE-1, ROUGE-2, ROUGE-L scores"]
 ```
 
-```
-function compute_metrics(eval_predictions):
-    predictions, labels = eval_predictions
-
-    decoded_preds  = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-    labels         = replace(labels, -100, tokenizer.pad_token_id)
-    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-
-    scores = rouge.compute(predictions=decoded_preds, references=decoded_labels)
-    return scores   # {rouge1, rouge2, rougeL, rougeLsum}
-```
+Since the collator injected `-100` into the labels for loss masking, that substitution has to be undone
+(`-100` → `pad_token_id`) before the label ids can be decoded back into text — `-100` is not a valid token
+id. `use_stemmer=True` reduces words to their stem before comparing (e.g. "filing"/"filed" both count as
+"file"), which keeps ROUGE from over-penalizing legitimate morphological variation in legal phrasing. NLTK's
+`punkt`/`punkt_tab` sentence tokenizers are downloaded as part of this step, since ROUGE-style preprocessing
+conventionally operates sentence-by-sentence.
 
 ## 4. Hyperparameters
 
-Defined before training via `Seq2SeqTrainingArguments` (or equivalent):
+Defined via `Seq2SeqTrainingArguments`:
 
-- **learning_rate** — usually small (e.g. `2e-5` to `5e-4`) since we are adapting, not training from scratch
-- **per_device_train/eval_batch_size** — limited by available GPU memory
-- **num_train_epochs** — how many passes over the training set
-- **weight_decay** — regularization to reduce overfitting
-- **predict_with_generate=True** — required so evaluation actually autoregressively generates text (needed for ROUGE), instead of just computing loss
-- **eval_strategy / save_strategy** — when to run evaluation and checkpointing (e.g. every epoch)
+| Hyperparameter | Value | Why |
+|---|---|---|
+| `learning_rate` | `3e-4` | Small, since we're adapting a pretrained model, not training from scratch |
+| `per_device_train_batch_size` | `4` | Limited by available GPU memory for a base-size T5 |
+| `per_device_eval_batch_size` | `2` | Generation during eval is more memory-hungry than a forward pass |
+| `num_train_epochs` | `3` | Few epochs — enough to adapt without overfitting a fine-tuning-sized dataset |
+| `weight_decay` | `0.01` | Light regularization |
+| `predict_with_generate` | `True` | Required so evaluation actually autoregressively generates text (needed for ROUGE), instead of just computing loss |
+| `eval_strategy` | `"epoch"` | Evaluate once per epoch |
+| `save_total_limit` | `3` | Caps how many checkpoints are kept on disk |
+| `push_to_hub` | `False` | Model is saved locally only |
 
 ## 5. Training + Evaluation
 
@@ -171,50 +176,24 @@ flowchart TD
     G -->|No| H["Final fine-tuned model"]
 ```
 
-```
-training_args = Seq2SeqTrainingArguments(
-    learning_rate=...,
-    per_device_train_batch_size=...,
-    per_device_eval_batch_size=...,
-    num_train_epochs=...,
-    weight_decay=...,
-    predict_with_generate=True,
-    eval_strategy="epoch",
-    save_strategy="epoch",
-)
+`Seq2SeqTrainer` orchestrates this loop end to end: it consumes the tokenized train/test splits, the data
+collator (dynamic padding + label masking), and the `compute_metrics` function defined above, then runs
+the epochs specified in the training arguments.
 
-trainer = Seq2SeqTrainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized_dataset.train,
-    eval_dataset=tokenized_dataset.validation,
-    tokenizer=tokenizer,
-    data_collator=data_collator,       # dynamic padding per batch
-    compute_metrics=compute_metrics,
-)
+## 6. Saving the Model
 
-trainer.train()
-metrics = trainer.evaluate()          # ROUGE scores on the validation set
-```
-
-## 6. Save the Model
-
-```
-model.save_pretrained(output_dir)
-tokenizer.save_pretrained(output_dir)
-```
-
-Saving both together guarantees that whoever loads the model later gets the exact tokenizer it was fine-tuned with.
+Because the tokenizer was registered with the `Seq2SeqTrainer` at construction time, a single
+`trainer.save_model(...)` call persists both the fine-tuned model weights and the tokenizer together to
+disk — this guarantees whoever loads the model later gets the exact tokenizer it was fine-tuned with,
+without a separate save step.
 
 ## 7. Deployment
 
-```
-legal_assistant = pipeline("text2text-generation", model=output_dir, tokenizer=output_dir)
-
-answer = legal_assistant("answer the legal question: " + user_question)
-```
-
-The model can also be pushed to the Hugging Face Hub (`push_to_hub`) for reuse or served behind an API for the legal-assistant application.
+Inference reloads the saved model/tokenizer from disk and calls `.generate()` directly (no `pipeline`
+wrapper): the input question is tokenized, generation is capped at 50 tokens, and `do_sample=True` with
+`temperature=0.4` is used — sampling with a fairly low temperature, trading strict determinism for some
+lexical variety in the answer while still staying close to the model's most likely continuations. The
+output ids are then decoded back to text, skipping special tokens.
 
 ---
 
@@ -224,10 +203,10 @@ The model can also be pushed to the Hugging Face Hub (`push_to_hub`) for reuse o
 flowchart TD
     subgraph Setup["Setup"]
         A["Load model + tokenizer<br/>google/flan-t5-base"]
-        B["Load dataset<br/>Law-StackExchange"]
+        B["Load dataset.csv<br/>80/20 split"]
     end
     subgraph Prep["Data Preparation"]
-        C["Preprocess & tokenize"]
+        C["Preprocess & tokenize<br/>prefix + truncation"]
     end
     subgraph Train["Training"]
         D["Define ROUGE metric"]
@@ -235,32 +214,11 @@ flowchart TD
         F["Seq2SeqTrainer<br/>train + evaluate"]
     end
     subgraph Ship["Output"]
-        G["Save model + tokenizer"]
-        H["Deploy pipeline / API"]
+        G["Save model + tokenizer<br/>trainer.save_model"]
+        H["Reload & generate()<br/>for inference"]
     end
 
     A --> C
     B --> C
     C --> D --> E --> F --> G --> H
-```
-
-Pseudocode:
-
-```
-tokenizer, model = load_pretrained("google/flan-t5-base")
-
-dataset = load_dataset("ymoslem/Law-StackExchange")
-tokenized_dataset = dataset.map(preprocess, batched=True)
-
-rouge = load_metric("rouge")
-
-training_args = Seq2SeqTrainingArguments(...)
-trainer = Seq2SeqTrainer(model, training_args, tokenized_dataset,
-                          compute_metrics=compute_metrics_with(rouge))
-
-trainer.train()
-trainer.evaluate()
-
-save(model, tokenizer, output_dir)
-deploy(output_dir)
 ```
