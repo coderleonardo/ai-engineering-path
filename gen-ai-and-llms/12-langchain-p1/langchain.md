@@ -15,6 +15,17 @@ exactly what varies between calls. See also
 [module 05](../05-prompt-engineering/prompt_engineering_basics.md) for the general prompt-phrasing
 strategies a template's static text should follow.
 
+```
+template:         "Suggest a name for a {business} that sells {product}."
+input_variables:  ["business", "product"]
+
+filled with business="bakery", product="sourdough bread":
+  -> "Suggest a name for a bakery that sells sourdough bread."
+```
+
+The same template renders a different prompt for every new `(business, product)` pair, without touching
+the static wording around the placeholders.
+
 ## Chains
 
 A **chain** is a sequence of operations that processes an input and produces an output by combining LLMs,
@@ -30,6 +41,27 @@ blocks for more advanced constructs like agents.
   than an implicit single value, so multiple chains can read and write distinct named variables and later
   steps can draw on any earlier output, not just the immediately preceding one.
 
+Example: a two-step pipeline that names a company, then writes a slogan for it.
+
+```
+SimpleSequentialChain:
+  step 1 -> "Sunrise Bakery"                      (a single string)
+  step 2 <- "Sunrise Bakery" -> "Rise and shine."  (only that string, nothing else)
+
+SequentialChain:
+  step 1 -> {company_name: "Sunrise Bakery"}
+  step 2 <- {company_name: "Sunrise Bakery"} -> {slogan: "Rise and shine."}
+  final result -> {company_name: "Sunrise Bakery", slogan: "Rise and shine."}
+```
+
+`SimpleSequentialChain` only ever forwards the latest string; `SequentialChain` keeps every named output
+around, including ones earlier than the immediately preceding step.
+
+> **Note:** as of LangChain 1.0, `LLMChain`, `SimpleSequentialChain`, and `SequentialChain` are legacy
+> ("classic") APIs, moved into the separate `langchain-classic` package. Modern LangChain composes
+> prompt → model pipelines with LCEL (`prompt | llm`, see [module 05](../05-prompt-engineering/README.md#3-augmented-generation--two-ways-to-wire-it))
+> or builds multi-step logic as a graph-based agent instead of a `Chain` subclass.
+
 ## Memory
 
 **Memory** components let chains, agents, and other constructs store and retrieve information from
@@ -42,18 +74,37 @@ has no awareness of prior turns.
 - **ConversationBufferWindowMemory** — keeps only the last *k* interactions, discarding older ones. This
   bounds prompt size and avoids overloading the model with irrelevant history, at the cost of losing
   context beyond the window.
+
+  ```
+  turn 1: "My name is Alice."
+  turn 2: "I live in Lisbon."
+  turn 3: "What's my name?"   (with k=1, only turn 2 is still in the window)
+    -> ConversationBufferMemory:       answers "Alice" (full history retained)
+    -> ConversationBufferWindowMemory: can't answer (turn 1 already fell out of the window)
+  ```
 - **ConversationChain** — a chain specialized for multi-turn dialogue: it comes with a default
   conversational prompt template and integrates directly with a memory component, abstracting away the
   bookkeeping of formatting history into each new prompt.
 
+> **Note:** as of LangChain 1.0, `ConversationBufferMemory`, `ConversationBufferWindowMemory`, and
+> `ConversationChain` are legacy ("classic") APIs. Modern LangChain tracks conversation state through a
+> **checkpointer** passed to an agent (thread-scoped short-term memory) rather than a memory object
+> attached to a chain — a different mechanism, not just a renamed one.
+
 ## Retrieval-Augmented Generation
 
 LangChain wires retrieval and generation together through a dedicated chain type (commonly
-`RetrievalQA`) that takes a retriever (backed by a vector store) and an LLM, and answers a query by first
-retrieving relevant documents and then generating a response grounded in them — the same RAG pattern
-covered conceptually in [module 05](../05-prompt-engineering/vector_databases.md), just expressed as a
-LangChain chain instead of a hand-assembled prompt.
+`RetrievalQA`) that takes a retriever (backed by a vector store — [Chroma](./chroma.md) in this module) and
+an LLM, and answers a query by first retrieving relevant documents and then generating a response grounded
+in them — the same RAG pattern covered conceptually in
+[module 05](../05-prompt-engineering/vector_databases.md), just expressed as a LangChain chain instead of a
+hand-assembled prompt.
 
 The **"stuff"** chain type is the simplest way to combine retrieved documents with a question: it
 concatenates ("stuffs") every retrieved document directly into the prompt in one shot, appropriate as long
 as the retrieved context comfortably fits the model's context window.
+
+> **Note:** as of LangChain 1.0, `RetrievalQA` and `VectorstoreIndexCreator` have been retired entirely —
+> they no longer appear in current LangChain documentation. Modern RAG either calls `retriever.invoke(query)`
+> directly and composes the result into a prompt by hand, or wraps the retriever as a tool
+> (`create_retriever_tool`) for an agent to call when it decides retrieval is needed.

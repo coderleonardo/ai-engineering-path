@@ -57,6 +57,8 @@ flowchart LR
 - The legacy approach uses `load_qa_chain(..., chain_type="stuff")` — the "stuff" strategy simply
   concatenates ("stuffs") all retrieved documents directly into the prompt template in one shot. It's the
   simplest chain type, appropriate as long as the retrieved context fits comfortably in the context window.
+  As of LangChain 1.0, `load_qa_chain` itself is a pre-1.0 "classic" API (moved to `langchain-classic`),
+  which is exactly why the LCEL approach below is shown alongside it.
 - The **LCEL** (LangChain Expression Language) approach builds the equivalent behavior explicitly: a
   prompt template piped (`|`) into the chat model, piped into an output parser that extracts plain text
   from the model's response object. This compositional style makes each stage of the chain visible and

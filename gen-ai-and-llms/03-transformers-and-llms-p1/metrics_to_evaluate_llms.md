@@ -29,6 +29,21 @@ Harmonic combination between precision and recall.
 
 $$\text{F1-Score} = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
 
+### Worked example
+
+Out of 100 emails, a spam classifier flags 30 as spam. Of those, 25 really are spam (TP) and 5 aren't
+(FP). Of the 70 it left alone, 65 really aren't spam (TN) and 5 actually were (FN, missed):
+
+```
+accuracy  = (TP + TN) / 100     = (25 + 65) / 100 = 0.90
+precision = TP / (TP + FP)      = 25 / (25 + 5)    = 0.83
+recall    = TP / (TP + FN)      = 25 / (25 + 5)    = 0.83
+F1        = 2 * (P * R)/(P + R) = 2*(0.83*0.83)/(0.83+0.83) = 0.83
+```
+
+High accuracy alone would have hidden the fact that the classifier still misses 1 in 6 real spam emails —
+precision and recall are what surface that.
+
 ## ROC-AUC and PR-AUC
 
 Commonly used in classification tasks, with PR-AUC indicated for imbalanced data.
@@ -43,6 +58,35 @@ pulls the score down when the generated text is noticeably shorter than the refe
 
 BLEU's origin is machine translation, so it suits tasks with a strong emphasis on precise, close-to-
 reference phrasing. Applied in [module 10](../10-customer-service-bot/README.md#6-evaluation--bleu).
+
+### Worked example
+
+Same pair used in the ROUGE example below, for a direct comparison:
+
+```
+reference: "the cat sat on the mat"
+candidate: "the cat was sat on the mat"
+```
+
+Clipped n-gram precision at each size (candidate matches capped at how many times an n-gram actually
+appears in the reference):
+
+```
+BLEU-1 (unigrams):  6/7 = 0.857
+BLEU-2 (bigrams):   4/6 = 0.667
+BLEU-3 (trigrams):  2/5 = 0.400
+BLEU-4 (4-grams):   1/4 = 0.250
+
+geometric mean of the four = 0.489
+brevity penalty = 1.0   (candidate is longer than the reference, so no penalty applies)
+
+BLEU = 1.0 * 0.489 = 0.489
+```
+
+**Interpretation:** precision stays reasonably high for single words but collapses as n grows, because the
+inserted "was" breaks every 3- and 4-gram that crosses it — one misplaced word costs BLEU far more than it
+costs ROUGE-1, since BLEU multiplies precisions across all four n-gram sizes instead of scoring unigram
+overlap alone.
 
 ## ROUGE (Recall-Oriented Understudy for Gisting Evaluation)
 

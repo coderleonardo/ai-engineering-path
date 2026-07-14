@@ -5,6 +5,11 @@ calls) and `ChatOpenAI` (chat-style, used for the conversational chatbot at the 
 templates, chain types, memory types, retrieval chains) are covered in
 [`langchain.md`](./langchain.md); this README covers how they're actually configured and combined.
 
+> **Note:** `LLMChain`, `SimpleSequentialChain`/`SequentialChain`, `ConversationBufferMemory`/
+> `ConversationBufferWindowMemory`/`ConversationChain`, `RetrievalQA`, and `VectorstoreIndexCreator` are all
+> pre-1.0 "classic" LangChain APIs — see the notes in [`langchain.md`](./langchain.md#chains) for what
+> replaced each of them. Documented here as-is because it reflects what was actually built.
+
 ## Pipeline Overview
 
 ```mermaid
@@ -72,7 +77,7 @@ Two ways of building the same retrieval pipeline appear back to back:
   embedding + indexing internally; querying it with `index.query(question, llm=...)` returns an answer in
   one call, with no manual control over the intermediate steps.
 - **Manual assembly** — `WebBaseLoader` scrapes a single web page into a document, `OpenAIEmbeddings`
-  embeds it, `Chroma.from_documents(...)` builds the vector store explicitly, and a `RetrievalQA` chain
+  embeds it, `Chroma.from_documents(...)` builds the [Chroma](./chroma.md) vector store explicitly, and a `RetrievalQA` chain
   (`chain_type="stuff"`, `retriever=db.as_retriever(search_kwargs={"k": 1})`) ties retrieval and generation
   together — `k=1` means only the single nearest document chunk is retrieved per query. A custom
   `PromptTemplate` with `context` and `question` variables controls exactly how the retrieved text is

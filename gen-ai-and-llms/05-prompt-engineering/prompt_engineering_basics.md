@@ -20,6 +20,15 @@
 
 - Use Examples to guide the model on the type of response expected
 
+```
+vague:    "Write about dogs."
+specific: "Write a 3-sentence, upbeat product description for a durable leash
+           aimed at owners of large, energetic breeds."
+```
+
+The specific version fixes length, tone, audience, and subject up front, leaving the model far less room
+to guess wrong about what's actually wanted.
+
 ## Challenges
 
 Each language model can interpret a prompt differently, so constant adjustments are necessary during the development process.

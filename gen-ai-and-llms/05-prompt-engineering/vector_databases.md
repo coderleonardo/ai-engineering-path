@@ -21,3 +21,17 @@ This form of storage is efficient because it enables:
 - Similarity search capabilities
 
 - Efficient indexing of large data volumes, increasing search speed
+
+```
+stored documents (embedded once):
+  doc A: "Our return policy allows refunds within 30 days."  -> [0.12, 0.87, ...]
+  doc B: "Shipping takes 3-5 business days."                 -> [0.55, 0.10, ...]
+
+query (embedded at search time):
+  "How long do I have to return an item?"                    -> [0.15, 0.83, ...]
+
+nearest by cosine similarity -> doc A
+```
+
+The query never has to share exact words with a document — it just has to land near it in vector space,
+which is what lets retrieval work on paraphrased or loosely-worded questions.
