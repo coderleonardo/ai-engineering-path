@@ -281,3 +281,86 @@ To make SFT viable in production, we integrate **LoRA** and **QLoRA** as the opt
 * **Preservation of Base Capabilities:** By freezing the base model weights, SFT via LoRA/QLoRA eliminates catastrophic forgetting. The original world knowledge remains intact while the adapters learn the new task mechanics.
 * **Decoupled Architecture:** You can train multiple independent SFT adapters (e.g., one for code generation, one for customer support) using the exact same underlying base model. At runtime, these tiny adapter weights (frequently less than 1% of the total parameters) are swapped or merged dynamically.
 * **Resource Optimization:** QLoRA drops the base model memory footprint to 4-bit (NF4), allowing the SFT backpropagation loop to compute gradients strictly for the low-rank matrices ($A$ and $B$). This cuts hardware constraints drastically, making the distillation of complex instructions viable on single-GPU setups.
+
+## Knowledge Distillation
+
+**Definition:** A model compression technique where a smaller **student** model is trained to reproduce
+the behavior of a larger, already-trained **teacher** model, rather than being trained on hard labels
+alone. Where PEFT/LoRA/QLoRA reduce the *cost of training*, distillation reduces the *cost of the model
+itself* — the student is a genuinely smaller network, so it stays cheaper at inference time even after
+training finishes, which a merged LoRA adapter does not (the merged model is still full-size).
+
+### Core Concept
+
+Instead of only comparing the student's predictions to ground-truth hard labels, distillation also trains
+the student to match the teacher's full output probability distribution (the **soft labels**). A hard
+label says only "this is class *dog*"; the teacher's soft distribution might say "90% dog, 8% wolf, 2%
+everything else" — that relative spread across wrong answers is called **dark knowledge**, and it's a
+richer training signal than a one-hot label alone, since it encodes which mistakes the teacher considers
+almost-plausible.
+
+A **temperature** $T$ softens both distributions before comparison:
+
+$$p_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$$
+
+where $z_i$ are the raw logits. $T = 1$ recovers the ordinary softmax; $T > 1$ flattens the distribution,
+making the dark knowledge in the smaller probabilities more visible to the loss instead of being drowned
+out by one dominant class.
+
+### The Distillation Loss
+
+Training combines two terms: the student's usual loss against hard labels, and a divergence term pulling
+the student's (softened) distribution toward the teacher's (softened) distribution.
+
+$$\mathcal{L} = \alpha \cdot \mathcal{L}_{CE}(y_{true}, \sigma(z_{student})) + (1 - \alpha) \cdot T^2 \cdot \mathcal{L}_{KL}\big(\sigma(z_{teacher}/T),\ \sigma(z_{student}/T)\big)$$
+
+- $\mathcal{L}_{CE}$ — standard cross-entropy against the ground-truth hard label.
+- $\mathcal{L}_{KL}$ — KL divergence between teacher and student soft distributions, scaled by $T^2$ to
+  keep gradient magnitude comparable across different temperature choices.
+- $\alpha$ — weighting between the two terms; both are typically kept in play rather than dropping the
+  hard-label term entirely, since ground truth is still the reliable signal when teacher and label disagree.
+
+**Training flow:**
+
+```
+1. Run the (frozen) teacher on the training batch -> teacher logits
+2. Run the student on the same batch              -> student logits
+3. Soften both with temperature T                 -> teacher_soft, student_soft
+4. loss = alpha * CE(hard_label, student_logits)
+        + (1 - alpha) * T^2 * KL(teacher_soft, student_soft)
+5. Backpropagate through the student only; teacher weights never update
+```
+
+### Practical Example — DistilBERT
+
+**Scenario:** Distilling BERT-base (110M parameters, 12 transformer layers) into a smaller student with
+half the layers, trained to match BERT's output distribution on the same pretraining corpus.
+
+| Metric | Teacher (BERT-base) | Student (DistilBERT) |
+|---|---|---|
+| Parameters | 110M | 66M (~40% smaller) |
+| Transformer layers | 12 | 6 |
+| Inference speed | 1x | ~1.6x faster |
+| GLUE benchmark score | 100% (reference) | ~97% retained |
+
+The student keeps most of the teacher's task performance while being cheaper to run — the point isn't
+matching the teacher exactly, but capturing enough of its behavior that the much smaller, faster model is
+still good enough to deploy.
+
+### Key Advantages
+
+- **Inference Efficiency:** unlike PEFT techniques, the resulting model is smaller end to end — less
+  memory and less compute on every inference call, not just during training.
+- **Deployment Flexibility:** a distilled student can be deployed anywhere a small model fits (mobile,
+  edge devices), independent of whatever hardware trained the teacher.
+- **Combinable with PEFT:** a distilled student can itself be fine-tuned with LoRA/QLoRA afterward — the
+  two techniques address different costs (model size vs. training cost) and aren't mutually exclusive.
+
+### Trade-offs
+
+- **Teacher Dependency:** distillation needs a strong, already-trained teacher available up front; it's a
+  compression step, not a way to reach capability the teacher itself doesn't have.
+- **Ceiling Effect:** the student's performance is bounded by how well a much smaller architecture can
+  approximate the teacher's decision boundary — some capability loss is expected, not a bug to be tuned away.
+- **Extra Training Cost:** distillation still requires a full training run (teacher inference + student
+  backpropagation over the whole dataset), unlike PEFT's near-instant adapter swapping.
