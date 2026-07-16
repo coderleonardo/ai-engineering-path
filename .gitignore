@@ -219,3 +219,6 @@ __marimo__/
 dsa_*
 dsa_*/
 dsa
+
+# Outputs from llm tests 
+gen-ai-and-llms/.tests
